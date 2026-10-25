@@ -7,3 +7,6 @@
 *.png binary
 *.jpg binary
 *.pdf binary
+
+# Keep the helper script out of the repository language statistics.
+scripts/** linguist-vendored
