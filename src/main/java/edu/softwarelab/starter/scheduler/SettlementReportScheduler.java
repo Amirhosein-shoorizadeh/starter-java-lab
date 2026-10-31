@@ -1,7 +1,7 @@
 package edu.softwarelab.starter.scheduler;
 
 import edu.softwarelab.starter.dto.report.SettlementDailyReportEvent;
-import edu.softwarelab.starter.producer.SettlementKafkaProducer;
+import edu.softwarelab.starter.producer.ReportKafkaProducer;
 import edu.softwarelab.starter.service.SettlementReportService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,13 +18,13 @@ public class SettlementReportScheduler {
     private static final ZoneId TEHRAN_ZONE = ZoneId.of("Asia/Tehran");
 
     private final SettlementReportService reportService;
-    private final SettlementKafkaProducer kafkaProducer;
+    private final ReportKafkaProducer kafkaProducer;
 
     // نگهداری آخرین تاریخ با ارسال موفق در حافظه برای جلوگیری از اجرای تکراری
     private LocalDate lastProcessedDate = null;
 
     public SettlementReportScheduler(SettlementReportService reportService,
-                                     SettlementKafkaProducer kafkaProducer) {
+                                     ReportKafkaProducer kafkaProducer) {
         this.reportService = reportService;
         this.kafkaProducer = kafkaProducer;
     }
@@ -45,7 +45,7 @@ public class SettlementReportScheduler {
             // ۲. تولید گزارش
             SettlementDailyReportEvent report = reportService.generateDailyReport(targetDate);
             log.info("Report generated successfully. report_id={}, transactions_count={}",
-                    report.reportId(), report.transactions().size());
+                    report.data().reportId(), report.data().transactions().size());
 
             // ۳. انتشار در کافکا (همراه با مکانیزم Retry)
             kafkaProducer.sendDailyReport(report);

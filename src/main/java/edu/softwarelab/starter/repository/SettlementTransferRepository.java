@@ -2,6 +2,7 @@ package edu.softwarelab.starter.repository;
 
 import edu.softwarelab.starter.entity.SettlementTransfer;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -25,5 +26,16 @@ public interface SettlementTransferRepository extends JpaRepository<SettlementTr
             @Param("fromDate") OffsetDateTime fromDate,
             @Param("toDate") OffsetDateTime toDate,
             @Param("statuses") Collection<String> statuses
+    );
+
+
+    @Modifying
+    @Query("UPDATE SettlementTransfer t SET t.status = :newStatus " +
+           "WHERE t.createdAt >= :fromDate AND t.createdAt < :toDate AND t.status = :currentStatus")
+    int updateTransfersStatusForBusinessDate(
+            @Param("fromDate") OffsetDateTime fromDate,
+            @Param("toDate") OffsetDateTime toDate,
+            @Param("currentStatus") String currentStatus,
+            @Param("newStatus") String newStatus
     );
 }

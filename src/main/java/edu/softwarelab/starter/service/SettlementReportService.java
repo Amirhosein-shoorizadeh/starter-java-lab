@@ -1,5 +1,6 @@
 package edu.softwarelab.starter.service;
 
+import edu.softwarelab.starter.dto.report.ReportResultEvent;
 import edu.softwarelab.starter.dto.report.SettlementDailyReportEvent;
 import edu.softwarelab.starter.dto.report.SettlementReportItem;
 import edu.softwarelab.starter.dto.report.SettlementReportSummary;
@@ -15,12 +16,15 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class SettlementReportService {
 
     private static final ZoneId TEHRAN_ZONE = ZoneId.of("Asia/Tehran");
     private static final Set<String> FINALIZED_STATUSES = Set.of("SUCCESS", "FAILED");
+    private static final Logger log = LoggerFactory.getLogger(SettlementReportService.class);
 
     private final SettlementTransferRepository transferRepository;
 
@@ -29,43 +33,102 @@ public class SettlementReportService {
     }
 
     /**
-     * تولید گزارش پایان روز کاری برای یک تاریخ مشخص
-     *
-     * @param businessDate تاریخ روز کاری مورد نظر
-     * @return ساختار نهایی گزارش آماده ارسال
+     * متد مخصوص اجرای خودکار (کرون‌جاب نیمه‌شب)
      */
     @Transactional(readOnly = true)
     public SettlementDailyReportEvent generateDailyReport(LocalDate businessDate) {
-        // ۱. محاسبه شروع و پایان روز بر اساس افق زمانی تهران (تبدیل به OffsetDateTime)
+        return generateDailyReport(businessDate, UUID.randomUUID(), null);
+    }
+
+    /**
+     * متد اصلی تولید گزارش (قابل استفاده هم برای کرون‌جاب و هم برای پاسخ به استعلام S6)
+     *
+     * @param businessDate  تاریخ روز کاری مورد نظر
+     * @param correlationId شناسه ردیابی لاگ‌ها (در صورت null بودن، یک مقدار جدید ساخته می‌شود)
+     * @param causationId   شناسه پیام استعلام درخواست‌کننده (در حالت کرون null است)
+     * @return ساختار نهایی گزارش آماده ارسال
+     */
+    @Transactional(readOnly = true)
+    public SettlementDailyReportEvent generateDailyReport(LocalDate businessDate, UUID correlationId, UUID causationId) {
+        log.info("Generating daily report: business_date={}, correlation_id={}, causation_id={}",
+                businessDate, correlationId, causationId);
+
         OffsetDateTime fromDate = businessDate.atStartOfDay(TEHRAN_ZONE).toOffsetDateTime();
         OffsetDateTime toDate = businessDate.plusDays(1).atStartOfDay(TEHRAN_ZONE).toOffsetDateTime();
 
-        // ۲. فراخوانی کوئری ریپازیتوری
         List<SettlementTransfer> transfers = transferRepository.findFinalizedTransfersForReport(
                 fromDate,
                 toDate,
                 FINALIZED_STATUSES
         );
 
-        // ۳. تبدیل موجودیت‌ها به DTO
         List<SettlementReportItem> items = transfers.stream()
                 .map(this::mapToReportItem)
                 .toList();
 
-        // ۴. محاسبه خلاصه گزارش (شامل مدیریت حالت خالی بودن تراکنش‌ها)
         SettlementReportSummary summary = calculateSummary(items);
-
-        // ۵. تولید شناسه پایدار گزارش (UUID v3 بر اساس تاریخ روز کاری)
         UUID reportId = generateDeterministicReportId(businessDate);
 
-        // ۶. سرهم‌بندی شیء نهایی گزارش
-        return new SettlementDailyReportEvent(
+        log.info("Daily report generated: report_id={}, total_records={}, total_amount={}",
+                reportId, summary.totalCount(), summary.totalAmount());
+
+        SettlementDailyReportEvent.ReportData reportData = new SettlementDailyReportEvent.ReportData(
                 reportId,
                 businessDate,
                 OffsetDateTime.now(),
                 summary,
                 items
         );
+
+        return new SettlementDailyReportEvent(
+                UUID.randomUUID(),
+                correlationId != null ? correlationId : UUID.randomUUID(),
+                causationId,
+                "S5-STL",
+                "SettlementDailyReport.v1",
+                reportData
+        );
+    }
+
+
+    @Transactional
+    public void processReportResult(ReportResultEvent event) {
+        if (event == null || event.data() == null) {
+            log.warn("Skipping null or empty ReportResultEvent.");
+            return;
+        }
+
+        var data = event.data();
+        UUID reportId = data.reportId();
+        LocalDate businessDate = data.businessDate();
+        String outcome = data.outcome();
+
+        log.info("Processing report result: report_id={}, business_date={}, outcome={}",
+                reportId, businessDate, outcome);
+
+        if ("ACCEPTED".equalsIgnoreCase(outcome)) {
+            OffsetDateTime fromDate = businessDate.atStartOfDay(TEHRAN_ZONE).toOffsetDateTime();
+            OffsetDateTime toDate = businessDate.plusDays(1).atStartOfDay(TEHRAN_ZONE).toOffsetDateTime();
+
+            int updatedCount = transferRepository.updateTransfersStatusForBusinessDate(
+                    fromDate,
+                    toDate,
+                    "SUCCESS",
+                    "SETTLED_CONFIRMED"
+            );
+
+            log.info("Successfully updated {} transfers to SETTLED_CONFIRMED for business_date={}",
+                    updatedCount, businessDate);
+
+        } else if ("REJECTED".equalsIgnoreCase(outcome)) {
+            String code = data.error() != null ? data.error().code() : "UNKNOWN";
+            String detail = data.error() != null ? data.error().detail() : "No details provided";
+
+            log.error("Report REJECTED by S6! report_id={}, business_date={}, error_code={}, detail={}",
+                    reportId, businessDate, code, detail);
+        } else {
+            log.warn("Received unrecognized report outcome: {}", outcome);
+        }
     }
 
     private SettlementReportItem mapToReportItem(SettlementTransfer transfer) {
@@ -107,11 +170,6 @@ public class SettlementReportService {
         return new SettlementReportSummary(totalCount, totalAmount, successCount, failedCount);
     }
 
-    /**
-     * تولید شناسه یکتای پایدار (Deterministic UUID) بر اساس تاریخ
-     * اگر گزارش یک روز مشخص چند بار تولید شود، این تابع دقیقاً همان UUID قبلی را می‌سازد
-     * تا سرویس S6 بتواند گزارش تکراری را تشخیص داده و مجدداً اعمال نکند (Idempotency).
-     */
     private UUID generateDeterministicReportId(LocalDate businessDate) {
         String seed = "SETTLEMENT-DAILY-REPORT:" + businessDate.toString();
         return UUID.nameUUIDFromBytes(seed.getBytes(StandardCharsets.UTF_8));
