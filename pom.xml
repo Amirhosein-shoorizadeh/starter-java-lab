@@ -10,6 +10,9 @@
     <relativePath/>
   </parent>
 
+
+
+
   <groupId>edu.softwarelab</groupId>
   <artifactId>starter-service</artifactId>
   <version>1.0.0</version>
@@ -63,6 +66,11 @@
       <scope>runtime</scope>
     </dependency>
 
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+
     <!-- کتابخانه تست (JUnit 5, AssertJ, SpringBootTest) -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -88,6 +96,9 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+
+
 
   <build>
     <finalName>starter-service</finalName>
