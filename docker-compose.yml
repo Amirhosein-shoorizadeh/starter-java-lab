@@ -1,17 +1,18 @@
-# Your own sandbox, for the neighbouring team to test against.
-#
-#   docker compose up --build -d
-#
-# The service binds 0.0.0.0 inside the container and the port below publishes
-# it on every interface of your machine, so your neighbour can reach it at
-# http://<your-ip>:8080. Find your address with `ip addr` (Linux),
-# `ipconfig` (Windows) or `ipconfig getifaddr en0` (macOS).
+version: '3.8'
+
 services:
+  # =======================================================
+  # 1. سرویس اصلی پروژه / سندروم تست هم‌تیمی (پورت 8080 یا 8085)
+  # =======================================================
   service:
     build: .
+    container_name: lab_service
     ports:
       - "8080:8080"
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8080/health || exit 1"]
       interval: 10s
@@ -19,24 +20,70 @@ services:
       retries: 5
       start_period: 20s
 
+  # =======================================================
+  # 2. پایگاه داده PostgreSQL (مطابق application.properties)
+  # =======================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres_s5
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: s5_settlement_db
+      POSTGRES_USER: labbank_s5
+      POSTGRES_PASSWORD: secret_s5_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_s5_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U labbank_s5 -d s5_settlement_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-version: '3.8'
-services:
-  kafka:
+  # =======================================================
+  # 3. کافکا کلاستر S6 (پورت 9092 با ایمیج رسمی apache/kafka)
+  # =======================================================
+  kafka-s6:
     image: apache/kafka:latest
-    container_name: local-kafka
+    container_name: local-kafka-s6
+    restart: unless-stopped
     ports:
       - "9092:9092"
     environment:
-      # تنظیمات حالت KRaft
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:19092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:19092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+  # =======================================================
+  # 4. کافکا کلاستر S3 (پورت 9093 با ایمیج رسمی apache/kafka)
+  # =======================================================
+  kafka-s3:
+    image: apache/kafka:latest
+    container_name: local-kafka-s3
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    environment:
+      KAFKA_NODE_ID: 2
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9093,CONTROLLER://0.0.0.0:19093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 2@localhost:19093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+volumes:
+  postgres_s5_data:
