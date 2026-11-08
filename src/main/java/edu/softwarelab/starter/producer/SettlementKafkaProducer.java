@@ -24,5 +24,6 @@ public class SettlementKafkaProducer {
         // ارسال پاسخ به تاپیک نتیجه عملیات
         kafkaTemplate.send(KafkaTopics.EVT_OPERATION_RESULT, result.getTransactionId().toString(), result);
         System.out.println("Sending ExecuteExternalTransferResult for transactionId: " + result.getTransactionId());
+        System.out.println("Sending ExecuteExternalTransferResult for transactionId: " + result.getTransactionId());
     }
 }
