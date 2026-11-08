@@ -21,11 +21,10 @@ describe('SettlementDashboard Component Tests', () => {
       },
     };
 
-    // استفاده از globalThis به جای global
     globalThis.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => mockApiResponse,
-    } as Response);
+    });
 
     render(<SettlementDashboard />);
 
@@ -45,7 +44,7 @@ describe('SettlementDashboard Component Tests', () => {
     globalThis.fetch = jest.fn().mockResolvedValue({
       ok: false,
       status: 400,
-    } as Response);
+    });
 
     render(<SettlementDashboard />);
 
