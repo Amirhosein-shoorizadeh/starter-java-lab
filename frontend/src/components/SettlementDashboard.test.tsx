@@ -1,12 +1,11 @@
-/// <reference types="jest" />
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { fireEvent, waitFor } from '@testing-library/dom';
+import { describe, test, expect, beforeEach, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SettlementDashboard } from './SettlementDashboard';
 
 describe('SettlementDashboard Component Tests', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   test('Frontend 1: Renders settlement report metrics on successful 200 API response', async () => {
@@ -21,10 +20,10 @@ describe('SettlementDashboard Component Tests', () => {
       },
     };
 
-    globalThis.fetch = jest.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => mockApiResponse,
-    });
+    } as Response);
 
     render(<SettlementDashboard />);
 
@@ -41,10 +40,10 @@ describe('SettlementDashboard Component Tests', () => {
   });
 
   test('Frontend 2: Displays error banner when API returns 400 Bad Request', async () => {
-    globalThis.fetch = jest.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 400,
-    });
+    } as Response);
 
     render(<SettlementDashboard />);
 
