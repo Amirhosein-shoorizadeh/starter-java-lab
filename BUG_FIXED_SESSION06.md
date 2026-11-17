@@ -2,7 +2,7 @@
 
 **Service:** S5 Settlement Reporting Service  
 **Team members:** سید حامد میردهقان; محمد امین آگاهی فرد; امیرحسین شوری زاده  
-**Exercise repository:** https://github.com/AUT-SE1/LabBank-S5-Session06.git  
+**Exercise repository:** https://github.com/HamedSPA/LabBank-S5-Session06.git
 **Team repository:** https://github.com/Amirhosein-shoorizadeh/starter-java-lab.git
 
 ## Incorrect Behavior and Root Cause
